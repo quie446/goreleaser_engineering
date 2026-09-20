@@ -1,0 +1,63 @@
+version: 2
+
+project_name: tool
+
+snapshot:
+  # Same commit -> same snapshot version; no wall-clock component.
+  version_template: "{{ incpatch .Version }}-dev.{{ .ShortCommit }}"
+
+metadata:
+  # Pins file mtimes inside archives to the commit time so two builds
+  # of the same commit produce byte-identical archives.
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
+builds:
+  - id: tool
+    main: .
+    binary: tool
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .ShortCommit }}
+
+archives:
+  - id: default
+    name_template: "tool_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+  # Only archives are checksummmed. SBOM JSON carries a generation timestamp
+  # and would therefore change on every build.
+  ids:
+    - default
+
+sboms:
+  - id: archive-sbom
+    artifacts: archive
+    documents:
+      - "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.cdx.json"
+    cmd: syft
+    args:
+      - "$artifact"
+      - "--output"
+      - "cyclonedx-json@1.6"
+      - "--file"
+      - "$document"
+
+changelog:
+  disable: true
+
+release:
+  disable: true

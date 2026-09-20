@@ -1,0 +1,55 @@
+name: tool-release
+
+on:
+  pull_request:
+    paths:
+      - "tool/**"
+      - ".github/workflows/tool-release.yml"
+  push:
+    tags:
+      - "tool-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tool
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tool/go.mod
+      - run: make test
+      - run: make release-check
+
+  release-snapshot:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tool
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tool/go.mod
+      - run: make release-snapshot
+      - name: List artifacts
+        run: ls -lh dist
+      - name: Smoke-test --version
+        run: |
+          tar -xzf dist/tool_*_linux_arm64.tar.gz -C /tmp
+          /tmp/tool --version
+      - name: Upload snapshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-snapshot-${{ github.sha }}
+          path: tool/dist
+          retention-days: 14
