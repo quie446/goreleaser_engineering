@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: MIT
+version: 2
+
+project_name: reltool
+
+env:
+  - GO111MODULE=on
+
+# Local builds: goreleaser release --snapshot --clean
+# Version is derived from the latest tag + short commit, e.g.
+# v1.2.3 on a clean tree   -> 1.2.3
+# 3 commits after v1.2.3   -> 1.2.3-dev.1fc2a3b (or 0.0.0-dev.* before any tag)
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev.{{ .ShortCommit }}"
+
+builds:
+  - id: reltool
+    main: .
+    binary: reltool
+    env:
+      - CGO_ENABLED=0
+    # Reproducibility: use the commit timestamp (not wall-clock time) when
+    # compiling, and never inject build time via ldflags.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X example.com/reltool/internal/version.Version={{ .Version }}
+      - -X example.com/reltool/internal/version.Commit={{ .FullCommit }}
+      - -X example.com/reltool/internal/version.CommitDate={{ .CommitDate }}
+      - -X example.com/reltool/internal/version.TreeState={{ if .IsGitDirty }}dirty{{ else }}clean{{ end }}
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - id: cyclonedx
+    artifacts: archive
+    documents:
+      - "${artifact}.sbom.cdx.json"
+    cmd: syft
+    args:
+      - "$artifact"
+      - "--output"
+      - "cyclonedx-json=$document"
